@@ -3,7 +3,8 @@ import requests
 from pyrogram import Client, filters
 
 # Telegram Bot Token
-BOT_TOKEN = "{{ secret.BOT_TOKEN }}"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+print(BOT_TOKEN)
 API_ID = {{ secret.API_ID }}  # Your Telegram API ID
 API_HASH = "{{ secret.API_HASH }}"
 CHAT_ID = "{{ secret.CHAT_ID }}"
