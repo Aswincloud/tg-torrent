@@ -42,8 +42,10 @@ async def handle_torrent(client, message):
     await message.reply("✅ Torrent added successfully!")
     os.remove(file_path)
 
-# Function to start Pyrogram bot
+
+# Function to start Pyrogram bot in a new event loop
 def start_bot():
+    asyncio.set_event_loop(asyncio.new_event_loop())  # Create a new event loop for the thread
     app.run()
 
 # Start Flask server
@@ -52,5 +54,5 @@ def start_server():
 
 # Run both Pyrogram and Flask concurrently
 if __name__ == "__main__":
-    threading.Thread(target=start_bot).start()
+    threading.Thread(target=start_bot, daemon=True).start()  # Daemon thread so it exits with main process
     start_server()
