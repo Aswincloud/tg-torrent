@@ -3,15 +3,15 @@ import requests
 from pyrogram import Client, filters
 
 # Read secrets from environment variables
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-API_ID = int(os.getenv("API_ID"))  # API_ID must be converted to int
-API_HASH = os.getenv("API_HASH")
-CHAT_ID = os.getenv("CHAT_ID")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+API_ID = int(os.environ.get("API_ID"))  # API_ID must be converted to int
+API_HASH = os.environ.get("API_HASH")
+CHAT_ID = os.environ.get("CHAT_ID")
 
 # qBittorrent Web API Credentials
-QB_URL = os.getenv("QB_URL", "http://localhost:8080")  # Default to localhost
-QB_USERNAME = os.getenv("QB_USERNAME")
-QB_PASSWORD = os.getenv("QB_PASSWORD")
+QB_URL = os.environ.get("QB_URL", "http://localhost:8080")  # Default to localhost
+QB_USERNAME = os.environ.get("QB_USERNAME")
+QB_PASSWORD = os.environ.get("QB_PASSWORD")
 
 # Initialize Telegram Bot
 app = Client("torrent_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
