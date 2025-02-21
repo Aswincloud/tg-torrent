@@ -44,7 +44,7 @@ async def handle_torrent(client, message):
 
 # Function to start Pyrogram bot
 def start_bot():
-    bot.run()
+    app.run()
 
 # Start Flask server
 def start_server():
