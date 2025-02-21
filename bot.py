@@ -27,6 +27,7 @@ def home():
 def qbittorrent_login():
     session = requests.Session()
     session.post(f"{QB_URL}/api/v2/auth/login", data={"username": QB_USERNAME, "password": QB_PASSWORD})
+    print("sessionnn", session)
     return session
 
 # Upload .torrent file to qBittorrent
@@ -38,6 +39,7 @@ async def handle_torrent(client, message):
     # Send file to qBittorrent
     with open(file_path, "rb") as f:
         files = {"torrents": f}
+        print("files", files)
         session.post(f"{QB_URL}/api/v2/torrents/add", files=files)
 
     await message.reply("✅ Torrent added successfully!")
