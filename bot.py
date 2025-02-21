@@ -1,5 +1,6 @@
 import os
 import requests
+from flask import Flask
 from pyrogram import Client, filters
 
 # Read secrets from environment variables
@@ -15,6 +16,10 @@ QB_PASSWORD = os.environ.get("QB_PASSWORD")
 
 # Initialize Telegram Bot
 app = Client("torrent_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+server = Flask(__name__)
+@server.route("/")
+def home():
+    return "Bot is running!", 200  # Koyeb health check endpoint
 
 # Login to qBittorrent
 def qbittorrent_login():
@@ -36,5 +41,15 @@ async def handle_torrent(client, message):
     await message.reply("✅ Torrent added successfully!")
     os.remove(file_path)
 
-# Start Bot
-app.run()
+# Function to start Pyrogram bot
+def start_bot():
+    bot.run()
+
+# Start Flask server
+def start_server():
+    server.run(host="0.0.0.0", port=8000)
+
+# Run both Pyrogram and Flask concurrently
+if __name__ == "__main__":
+    threading.Thread(target=start_bot).start()
+    start_server()
