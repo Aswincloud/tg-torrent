@@ -47,7 +47,7 @@ async def handle_torrent(client, message):
 # Function to start Pyrogram bot in a new event loop
 def start_bot():
     asyncio.set_event_loop(asyncio.new_event_loop())  # Create a new event loop for the thread
-    app.run()
+    app.start()
 
 # Start Flask server
 def start_server():
