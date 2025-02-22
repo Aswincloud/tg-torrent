@@ -26,6 +26,11 @@ server = Flask(__name__)
 def home():
     return "Bot is running!", 200  # Koyeb health check endpoint
 
+# Ping command
+@app.on_message(filters.command("ping") & filters.private)
+async def ping(client, message):
+    await message.reply("🏓 Pong! The bot is alive.")
+    
 # Login to qBittorrent
 def qbittorrent_login():
     session = requests.Session()
