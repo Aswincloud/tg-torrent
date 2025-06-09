@@ -75,6 +75,26 @@ async def handle_torrent(client, message):
         print(f"⏳ Flood wait detected! Sleeping for {e.value} seconds...")
         time.sleep(e.value)  # Sleep to prevent API bans
 
+
+@app.on_message(filters.command("status") & filters.private)
+async def status(client, message):
+    session = qbittorrent_login()
+    if not session:
+        await message.reply("❌ Could not connect to qBittorrent.")
+        return
+
+    res = session.get(f"{QB_URL}/api/v2/torrents/info")
+    if res.status_code == 200:
+        torrents = res.json()
+        if not torrents:
+            await message.reply("📭 No active downloads.")
+        else:
+            msg = "\n".join([f"📥 {t['name']} - {t['progress']*100:.1f}%" for t in torrents])
+            await message.reply(msg)
+    else:
+        await message.reply("⚠️ Failed to fetch torrent info.")
+
+
 # Function to start Flask server
 def start_server():
     server.run(host="0.0.0.0", port=8000)
