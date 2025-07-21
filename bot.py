@@ -2,8 +2,10 @@ import os
 import requests
 import asyncio
 import threading
+import time
 from flask import Flask
 from pyrogram import Client, filters
+from pyrogram.errors import FloodWait
 
 # Read secrets from environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -33,18 +35,42 @@ async def ping(client, message):
     
 # Login to qBittorrent
 def qbittorrent_login():
-    session = requests.Session()
-    login_response = session.post(
-        f"{QB_URL}/api/v2/auth/login", 
-        data={"username": QB_USERNAME, "password": QB_PASSWORD}
-    )
-    
-    if login_response.text != "Ok.":
-        print("❌ qBittorrent login failed!")
+    try:
+        print(f"🔗 Attempting to connect to qBittorrent at: {QB_URL}")
+        print(f"👤 Using username: {QB_USERNAME}")
+        
+        session = requests.Session()
+        login_response = session.post(
+            f"{QB_URL}/api/v2/auth/login", 
+            data={"username": QB_USERNAME, "password": QB_PASSWORD},
+            timeout=10  # Add timeout to prevent hanging
+        )
+        
+        print(f"📊 Login response status code: {login_response.status_code}")
+        print(f"📝 Login response text: '{login_response.text}'")
+        
+        if login_response.text != "Ok.":
+            print("❌ qBittorrent login failed!")
+            if login_response.status_code == 403:
+                print("🚫 Access denied - check username/password")
+            elif login_response.status_code == 404:
+                print("🔍 qBittorrent API not found - check URL and port")
+            return None
+        
+        print("✅ Logged in to qBittorrent")
+        return session
+        
+    except requests.exceptions.ConnectionError as e:
+        print(f"🌐 Connection error: {e}")
+        print("💡 Check if qBittorrent is running and accessible")
         return None
-    
-    print("✅ Logged in to qBittorrent")
-    return session
+    except requests.exceptions.Timeout as e:
+        print(f"⏰ Timeout error: {e}")
+        print("💡 qBittorrent might be slow to respond")
+        return None
+    except Exception as e:
+        print(f"❌ Unexpected error during login: {e}")
+        return None
 
 # Upload .torrent file to qBittorrent
 @app.on_message(filters.document & filters.private)
