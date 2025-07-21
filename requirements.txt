@@ -3,3 +3,4 @@ flask
 asyncio
 tgcrypto
 requests
+cloudscraper

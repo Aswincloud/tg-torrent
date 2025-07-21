@@ -1,5 +1,6 @@
 import os
 import requests
+import cloudscraper
 import asyncio
 import threading
 import time
@@ -33,26 +34,31 @@ def home():
 async def ping(client, message):
     await message.reply("🏓 Pong! The bot is alive.")
     
-# Login to qBittorrent
+# Login to qBittorrent (with Cloudflare bypass)
 def qbittorrent_login():
     try:
         print(f"🔗 Attempting to connect to qBittorrent at: {QB_URL}")
         print(f"👤 Using username: {QB_USERNAME}")
+        print("☁️ Using Cloudflare bypass...")
         
-        session = requests.Session()
+        # Use cloudscraper instead of requests to bypass Cloudflare
+        session = cloudscraper.create_scraper()
         login_response = session.post(
             f"{QB_URL}/api/v2/auth/login", 
             data={"username": QB_USERNAME, "password": QB_PASSWORD},
-            timeout=10  # Add timeout to prevent hanging
+            timeout=30  # Increased timeout for Cloudflare challenges
         )
         
         print(f"📊 Login response status code: {login_response.status_code}")
-        print(f"📝 Login response text: '{login_response.text}'")
+        print(f"📝 Login response text: '{login_response.text[:100]}...'")  # Truncate long responses
         
         if login_response.text != "Ok.":
             print("❌ qBittorrent login failed!")
             if login_response.status_code == 403:
-                print("🚫 Access denied - check username/password")
+                if "cloudflare" in login_response.text.lower() or "challenge" in login_response.text.lower():
+                    print("☁️ Cloudflare challenge detected - this may take a moment...")
+                else:
+                    print("🚫 Access denied - check username/password")
             elif login_response.status_code == 404:
                 print("🔍 qBittorrent API not found - check URL and port")
             return None
@@ -66,7 +72,7 @@ def qbittorrent_login():
         return None
     except requests.exceptions.Timeout as e:
         print(f"⏰ Timeout error: {e}")
-        print("💡 qBittorrent might be slow to respond")
+        print("💡 qBittorrent or Cloudflare challenge might be slow to respond")
         return None
     except Exception as e:
         print(f"❌ Unexpected error during login: {e}")
