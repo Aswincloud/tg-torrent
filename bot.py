@@ -1,138 +1,141 @@
 import os
-import requests
-import cloudscraper
 import asyncio
 import threading
-import time
+import cloudscraper
 from flask import Flask
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
 
-# Read secrets from environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-API_ID = int(os.environ.get("API_ID"))  # API_ID must be converted to int
+API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
-CHAT_ID = os.environ.get("CHAT_ID")
-
-# qBittorrent Web API Credentials
-QB_URL = os.environ.get("QB_URL", "http://localhost:8080")  # Default to localhost
+QB_URL = os.environ.get("QB_URL", "http://localhost:8080")
 QB_USERNAME = os.environ.get("QB_USERNAME")
 QB_PASSWORD = os.environ.get("QB_PASSWORD")
+ALLOWED_USERS = [int(x) for x in os.environ.get("ALLOWED_USERS", "").split(",") if x]
 
-# Initialize Telegram Bot
-app = Client("torrent_bot_session", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-# Create Flask server for Koyeb health checks
+app = Client("torrent_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 server = Flask(__name__)
+
+# Cached session
+_qb_session = None
+
+def get_qb_session():
+    global _qb_session
+    if _qb_session:
+        # Test if still valid
+        try:
+            r = _qb_session.get(f"{QB_URL}/api/v2/app/version", timeout=10)
+            if r.status_code == 200:
+                return _qb_session
+        except Exception:
+            pass
+    
+    session = cloudscraper.create_scraper()
+    try:
+        r = session.post(
+            f"{QB_URL}/api/v2/auth/login",
+            data={"username": QB_USERNAME, "password": QB_PASSWORD},
+            timeout=30,
+        )
+        if r.text.strip() == "Ok.":
+            _qb_session = session
+            return session
+    except Exception as e:
+        print(f"qB login error: {e}")
+    return None
 
 @server.route("/")
 def home():
-    return "Bot is running!", 200  # Koyeb health check endpoint
+    return "Bot is running!", 200
 
-# Ping command
+def user_allowed(message):
+    return not ALLOWED_USERS or message.from_user.id in ALLOWED_USERS
+
 @app.on_message(filters.command("ping") & filters.private)
 async def ping(client, message):
-    await message.reply("🏓 Pong! The bot is alive.")
-    
-# Login to qBittorrent (with Cloudflare bypass)
-def qbittorrent_login():
-    try:
-        print(f"🔗 Attempting to connect to qBittorrent at: {QB_URL}")
-        print(f"👤 Using username: {QB_USERNAME}")
-        print("☁️ Using Cloudflare bypass...")
-        
-        # Use cloudscraper instead of requests to bypass Cloudflare
-        session = cloudscraper.create_scraper()
-        login_response = session.post(
-            f"{QB_URL}/api/v2/auth/login", 
-            data={"username": QB_USERNAME, "password": QB_PASSWORD},
-            timeout=30  # Increased timeout for Cloudflare challenges
-        )
-        
-        print(f"📊 Login response status code: {login_response.status_code}")
-        print(f"📝 Login response text: '{login_response.text[:100]}...'")  # Truncate long responses
-        
-        if login_response.text != "Ok.":
-            print("❌ qBittorrent login failed!")
-            if login_response.status_code == 403:
-                if "cloudflare" in login_response.text.lower() or "challenge" in login_response.text.lower():
-                    print("☁️ Cloudflare challenge detected - this may take a moment...")
-                else:
-                    print("🚫 Access denied - check username/password")
-            elif login_response.status_code == 404:
-                print("🔍 qBittorrent API not found - check URL and port")
-            return None
-        
-        print("✅ Logged in to qBittorrent")
-        return session
-        
-    except requests.exceptions.ConnectionError as e:
-        print(f"🌐 Connection error: {e}")
-        print("💡 Check if qBittorrent is running and accessible")
-        return None
-    except requests.exceptions.Timeout as e:
-        print(f"⏰ Timeout error: {e}")
-        print("💡 qBittorrent or Cloudflare challenge might be slow to respond")
-        return None
-    except Exception as e:
-        print(f"❌ Unexpected error during login: {e}")
-        return None
+    if not user_allowed(message): return
+    await message.reply("🏓 Pong!")
 
-# Upload .torrent file to qBittorrent
+@app.on_message(filters.command("magnet") & filters.private)
+async def add_magnet(client, message):
+    if not user_allowed(message): return
+    if len(message.command) < 2:
+        await message.reply("Usage: /magnet <magnet_link>")
+        return
+    magnet = message.text.split(None, 1)[1]
+    
+    def _add():
+        s = get_qb_session()
+        if not s: return None
+        return s.post(f"{QB_URL}/api/v2/torrents/add", data={"urls": magnet}, timeout=30)
+    
+    r = await asyncio.to_thread(_add)
+    if r and r.status_code == 200:
+        await message.reply("✅ Magnet added!")
+    else:
+        await message.reply("❌ Failed to add magnet.")
+
 @app.on_message(filters.document & filters.private)
 async def handle_torrent(client, message):
-    print("📩 Received a file...")  # Debugging
+    if not user_allowed(message): return
+    
+    fname = (message.document.file_name or "").lower()
+    if not fname.endswith(".torrent"):
+        await message.reply("⚠️ Please send a .torrent file.")
+        return
     
     try:
+        status_msg = await message.reply("⬇️ Downloading...")
         file_path = await message.download()
-        print(f"✅ File downloaded: {file_path}")
         
-        session = qbittorrent_login()
-        if not session:
-            await message.reply("❌ Failed to connect to qBittorrent!")
-            return
+        def _upload():
+            s = get_qb_session()
+            if not s: return None
+            with open(file_path, "rb") as f:
+                return s.post(f"{QB_URL}/api/v2/torrents/add",
+                              files={"torrents": f}, timeout=60)
         
-        with open(file_path, "rb") as f:
-            files = {"torrents": f}
-            response = session.post(f"{QB_URL}/api/v2/torrents/add", files=files)
-        
-        if response.status_code == 200:
-            await message.reply("✅ Torrent added successfully!")
+        r = await asyncio.to_thread(_upload)
+        if r and r.status_code == 200:
+            await status_msg.edit("✅ Torrent added!")
         else:
-            await message.reply(f"❌ Failed to add torrent! {response.text}")
-
-        os.remove(file_path)
-    
+            await status_msg.edit(f"❌ Failed: {r.text if r else 'no session'}")
     except FloodWait as e:
-        print(f"⏳ Flood wait detected! Sleeping for {e.value} seconds...")
-        time.sleep(e.value)  # Sleep to prevent API bans
-
+        await asyncio.sleep(e.value)
+    except Exception as e:
+        await message.reply(f"❌ Error: {e}")
+    finally:
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
 
 @app.on_message(filters.command("status") & filters.private)
 async def status(client, message):
-    session = qbittorrent_login()
-    if not session:
-        await message.reply("❌ Could not connect to qBittorrent.")
+    if not user_allowed(message): return
+    
+    def _get():
+        s = get_qb_session()
+        if not s: return None
+        return s.get(f"{QB_URL}/api/v2/torrents/info", timeout=30)
+    
+    r = await asyncio.to_thread(_get)
+    if not r or r.status_code != 200:
+        await message.reply("⚠️ Failed to fetch info.")
         return
+    
+    torrents = r.json()
+    if not torrents:
+        await message.reply("📭 No active downloads.")
+        return
+    
+    lines = [f"📥 {t['name'][:50]} — {t['progress']*100:.1f}% ({t['state']})"
+             for t in torrents[:20]]
+    await message.reply("\n".join(lines))
 
-    res = session.get(f"{QB_URL}/api/v2/torrents/info")
-    if res.status_code == 200:
-        torrents = res.json()
-        if not torrents:
-            await message.reply("📭 No active downloads.")
-        else:
-            msg = "\n".join([f"📥 {t['name']} - {t['progress']*100:.1f}%" for t in torrents])
-            await message.reply(msg)
-    else:
-        await message.reply("⚠️ Failed to fetch torrent info.")
-
-
-# Function to start Flask server
 def start_server():
     server.run(host="0.0.0.0", port=8000)
 
-# Run both Pyrogram and Flask concurrently
 if __name__ == "__main__":
-    threading.Thread(target=start_server, daemon=True).start()  # Start Flask in a new thread
-    print("🚀 Starting Telegram bot...")
-    app.run()  # Ensures Pyrogram listens for messages
+    threading.Thread(target=start_server, daemon=True).start()
+    print("🚀 Starting bot...")
+    app.run()
