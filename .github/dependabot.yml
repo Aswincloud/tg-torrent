@@ -10,3 +10,10 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    ignore:
+      # tgcrypto only ships wheels up to cp311; slim image has no compiler,
+      # so keep Python pinned to 3.11.x (patch updates only).
+      - dependency-name: "python"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"

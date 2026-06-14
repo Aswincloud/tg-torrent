@@ -1,6 +1,5 @@
 pyrogram
 flask
-asyncio
 tgcrypto
 requests
 cloudscraper
