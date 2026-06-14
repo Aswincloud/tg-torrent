@@ -30,15 +30,18 @@ def get_qb_session():
                 return _qb_session
         except Exception:
             pass
-    
+
     session = cloudscraper.create_scraper()
     try:
-        r = session.post(
+        session.post(
             f"{QB_URL}/api/v2/auth/login",
             data={"username": QB_USERNAME, "password": QB_PASSWORD},
             timeout=30,
         )
-        if r.text.strip() == "Ok.":
+        # Verify via an authenticated call — works whether the server
+        # replies "Ok." (200) or 204 No Content on a successful login.
+        v = session.get(f"{QB_URL}/api/v2/app/version", timeout=10)
+        if v.status_code == 200:
             _qb_session = session
             return session
     except Exception as e:
@@ -64,12 +67,12 @@ async def add_magnet(client, message):
         await message.reply("Usage: /magnet <magnet_link>")
         return
     magnet = message.text.split(None, 1)[1]
-    
+
     def _add():
         s = get_qb_session()
         if not s: return None
         return s.post(f"{QB_URL}/api/v2/torrents/add", data={"urls": magnet}, timeout=30)
-    
+
     r = await asyncio.to_thread(_add)
     if r and r.status_code == 200:
         await message.reply("✅ Magnet added!")
@@ -79,23 +82,23 @@ async def add_magnet(client, message):
 @app.on_message(filters.document & filters.private)
 async def handle_torrent(client, message):
     if not user_allowed(message): return
-    
+
     fname = (message.document.file_name or "").lower()
     if not fname.endswith(".torrent"):
         await message.reply("⚠️ Please send a .torrent file.")
         return
-    
+
     try:
         status_msg = await message.reply("⬇️ Downloading...")
         file_path = await message.download()
-        
+
         def _upload():
             s = get_qb_session()
             if not s: return None
             with open(file_path, "rb") as f:
                 return s.post(f"{QB_URL}/api/v2/torrents/add",
                               files={"torrents": f}, timeout=60)
-        
+
         r = await asyncio.to_thread(_upload)
         if r and r.status_code == 200:
             await status_msg.edit("✅ Torrent added!")
@@ -112,22 +115,22 @@ async def handle_torrent(client, message):
 @app.on_message(filters.command("status") & filters.private)
 async def status(client, message):
     if not user_allowed(message): return
-    
+
     def _get():
         s = get_qb_session()
         if not s: return None
         return s.get(f"{QB_URL}/api/v2/torrents/info", timeout=30)
-    
+
     r = await asyncio.to_thread(_get)
     if not r or r.status_code != 200:
         await message.reply("⚠️ Failed to fetch info.")
         return
-    
+
     torrents = r.json()
     if not torrents:
         await message.reply("📭 No active downloads.")
         return
-    
+
     lines = [f"📥 {t['name'][:50]} — {t['progress']*100:.1f}% ({t['state']})"
              for t in torrents[:20]]
     await message.reply("\n".join(lines))
