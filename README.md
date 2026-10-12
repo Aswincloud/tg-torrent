@@ -25,6 +25,7 @@ Deployed on [Koyeb](https://koyeb.com) as a containerized service using Docker.
 | `QB_USERNAME` | qBittorrent username |
 | `QB_PASSWORD` | qBittorrent password |
 | `ALLOWED_USERS` | Comma-separated Telegram user IDs allowed to use the bot |
+| `SSH_KNOWN_HOSTS` | Optional path to the SSH `known_hosts` file used to verify `SSH_HOST` |
 | `CHAT_ID` | Primary chat/user ID |
 
 ### Run with Docker
