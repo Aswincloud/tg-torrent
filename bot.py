@@ -3,6 +3,7 @@ import io
 import asyncio
 import threading
 import posixpath
+import re
 import cloudscraper
 import paramiko
 from flask import Flask
@@ -23,6 +24,9 @@ SSH_HOST = os.environ.get("SSH_HOST", "ssh.aswincloud.com")
 SSH_PORT = int(os.environ.get("SSH_PORT", "22"))
 SSH_USER = os.environ.get("SSH_USER", "aswin")
 SSH_KEY = os.environ.get("SSH_KEY", "")          # private key contents (PEM/OpenSSH)
+SSH_KNOWN_HOSTS = os.environ.get(
+    "SSH_KNOWN_HOSTS", os.path.expanduser("~/.ssh/known_hosts")
+)
 # Token->path queue file on the server (written by the qBittorrent sort hook),
 # in the SSH user's home so the bot can read it over SSH.
 RENAME_QUEUE = os.environ.get("RENAME_QUEUE", "/home/aswin/Movies/.rename_queue.tsv")
@@ -41,7 +45,10 @@ def _ssh_run(cmd):
     if key is None:
         return (1, "", "could not parse SSH_KEY")
     cli = paramiko.SSHClient()
-    cli.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    cli.load_system_host_keys()
+    if SSH_KNOWN_HOSTS and os.path.exists(SSH_KNOWN_HOSTS):
+        cli.load_host_keys(SSH_KNOWN_HOSTS)
+    cli.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
         cli.connect(SSH_HOST, port=SSH_PORT, username=SSH_USER, pkey=key, timeout=20)
         _in, _out, _err = cli.exec_command(cmd, timeout=30)
@@ -53,13 +60,16 @@ def _ssh_run(cmd):
         try: cli.close()
         except Exception: pass
 
+def _shell_quote(value):
+    return "'" + value.replace("'", "'\\''") + "'"
+
 def _lookup_path(token):
     """Resolve a short token to its real file path via the server queue file."""
-    safe = "".join(c for c in token if c.isalnum())  # token is alnum only
-    if not safe:
+    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9]+", token):
         return None
     rc, out, _ = _ssh_run(
-        f"awk -F'\\t' '$1==\"{safe}\"{{print $2; exit}}' {RENAME_QUEUE} 2>/dev/null"
+        f"awk -F '\\t' -v key={_shell_quote(token)} "
+        f"'$1 == key {{print $2; exit}}' {_shell_quote(RENAME_QUEUE)} 2>/dev/null"
     )
     p = out.strip()
     return p or None
@@ -82,9 +92,8 @@ def _do_rename(old_path, new_base):
     if new_path == old_path:
         return (True, new_base)
     # shell-quote both paths with single quotes (escape embedded quotes)
-    def q(s): return "'" + s.replace("'", "'\\''") + "'"
-    cmd = (f"test -e {q(old_path)} && ! test -e {q(new_path)} "
-           f"&& mv -n {q(old_path)} {q(new_path)} && echo OK")
+    cmd = (f"test -e {_shell_quote(old_path)} && ! test -e {_shell_quote(new_path)} "
+           f"&& mv -n {_shell_quote(old_path)} {_shell_quote(new_path)} && echo OK")
     rc, out, err = _ssh_run(cmd)
     if "OK" in out:
         return (True, new_base)
@@ -223,6 +232,9 @@ async def on_rename_button(client, cq):
     if not _user_id_allowed(cq.from_user.id):
         await cq.answer("Not allowed", show_alert=True); return
     token = cq.data.split(":", 1)[1]
+    if not re.fullmatch(r"[A-Za-z0-9]+", token):
+        await cq.answer("Invalid token", show_alert=True)
+        return
     path = await asyncio.to_thread(_lookup_path, token)
     if not path:
         await cq.answer("File not found (already renamed or removed).", show_alert=True)
@@ -245,6 +257,8 @@ async def on_rename_reply(client, message):
     if not replied or not replied.text or "rn-token:" not in replied.text:
         return  # not a reply to our rename prompt; ignore
     token = replied.text.split("rn-token:", 1)[1].strip()
+    if not re.fullmatch(r"[A-Za-z0-9]+", token):
+        return
     new_name = message.text.strip()
     path = await asyncio.to_thread(_lookup_path, token)
     if not path:
