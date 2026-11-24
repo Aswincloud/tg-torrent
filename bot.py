@@ -17,6 +17,10 @@ QB_URL = os.environ.get("QB_URL", "http://localhost:8080")
 QB_USERNAME = os.environ.get("QB_USERNAME")
 QB_PASSWORD = os.environ.get("QB_PASSWORD")
 ALLOWED_USERS = [int(x) for x in os.environ.get("ALLOWED_USERS", "").split(",") if x]
+if not ALLOWED_USERS:
+    # Fail closed: without an allowlist every Telegram user could add torrents
+    # and rename files on the media server.
+    raise SystemExit("ALLOWED_USERS is required: set it to a comma-separated list of Telegram user ids")
 
 # --- SSH (for renaming sorted media files on the home server) ---------------
 SSH_HOST = os.environ.get("SSH_HOST", "ssh.aswincloud.com")
@@ -131,7 +135,7 @@ def home():
     return "Bot is running!", 200
 
 def user_allowed(message):
-    return not ALLOWED_USERS or message.from_user.id in ALLOWED_USERS
+    return message.from_user.id in ALLOWED_USERS
 
 @app.on_message(filters.command("ping") & filters.private)
 async def ping(client, message):
@@ -216,7 +220,7 @@ async def status(client, message):
 from pyrogram import filters as _filters
 
 def _user_id_allowed(uid):
-    return not ALLOWED_USERS or uid in ALLOWED_USERS
+    return uid in ALLOWED_USERS
 
 @app.on_callback_query(_filters.regex(r"^rn:"))
 async def on_rename_button(client, cq):
