@@ -26,6 +26,8 @@ Deployed on [Koyeb](https://koyeb.com) as a containerized service using Docker.
 | `QB_PASSWORD` | qBittorrent password |
 | `ALLOWED_USERS` | **Required.** Comma-separated Telegram user IDs allowed to use the bot; the bot refuses to start without it |
 | `CHAT_ID` | Primary chat/user ID |
+| `CF_ACCESS_CLIENT_ID` | Cloudflare Access service-token ID, when the WebUI is behind Cloudflare Access |
+| `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service-token secret (pair of the above) |
 
 ### Run with Docker
 

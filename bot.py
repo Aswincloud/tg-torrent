@@ -114,6 +114,12 @@ def get_qb_session():
             pass
 
     session = cloudscraper.create_scraper()
+    # Cloudflare Access service token: lets this bot through the Access login in
+    # front of the qBittorrent WebUI. Ignored by Cloudflare when Access is off.
+    cf_id = os.environ.get("CF_ACCESS_CLIENT_ID")
+    cf_secret = os.environ.get("CF_ACCESS_CLIENT_SECRET")
+    if cf_id and cf_secret:
+        session.headers.update({"CF-Access-Client-Id": cf_id, "CF-Access-Client-Secret": cf_secret})
     try:
         session.post(
             f"{QB_URL}/api/v2/auth/login",
