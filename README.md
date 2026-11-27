@@ -37,7 +37,7 @@ docker run -d \
   -e BOT_TOKEN=your_token \
   -e API_ID=your_api_id \
   -e API_HASH=your_api_hash \
-  -e QB_URL=http://your-qbittorrent-url \
+  -e QB_URL=https://your-qbittorrent-url \
   -e QB_USERNAME=admin \
   -e QB_PASSWORD=your_password \
   -e ALLOWED_USERS=123456789 \

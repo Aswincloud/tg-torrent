@@ -22,6 +22,13 @@ if not ALLOWED_USERS:
     # and rename files on the media server.
     raise SystemExit("ALLOWED_USERS is required: set it to a comma-separated list of Telegram user ids")
 
+# Optional Cloudflare Access service token for the WebUI. Never send its secret
+# in cleartext: an HTTPS redirect would come too late to protect the first request.
+CF_ACCESS_CLIENT_ID = os.environ.get("CF_ACCESS_CLIENT_ID")
+CF_ACCESS_CLIENT_SECRET = os.environ.get("CF_ACCESS_CLIENT_SECRET")
+if CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET and not QB_URL.lower().startswith("https://"):
+    raise SystemExit("QB_URL must use https:// when CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET are set")
+
 # --- SSH (for renaming sorted media files on the home server) ---------------
 SSH_HOST = os.environ.get("SSH_HOST", "ssh.aswincloud.com")
 SSH_PORT = int(os.environ.get("SSH_PORT", "22"))
@@ -116,10 +123,8 @@ def get_qb_session():
     session = cloudscraper.create_scraper()
     # Cloudflare Access service token: lets this bot through the Access login in
     # front of the qBittorrent WebUI. Ignored by Cloudflare when Access is off.
-    cf_id = os.environ.get("CF_ACCESS_CLIENT_ID")
-    cf_secret = os.environ.get("CF_ACCESS_CLIENT_SECRET")
-    if cf_id and cf_secret:
-        session.headers.update({"CF-Access-Client-Id": cf_id, "CF-Access-Client-Secret": cf_secret})
+    if CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET:
+        session.headers.update({"CF-Access-Client-Id": CF_ACCESS_CLIENT_ID, "CF-Access-Client-Secret": CF_ACCESS_CLIENT_SECRET})
     try:
         session.post(
             f"{QB_URL}/api/v2/auth/login",
